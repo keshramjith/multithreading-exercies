@@ -8,29 +8,26 @@ import scala.io.Source
 
 object ParallelFileProcessor extends ZIOAppDefault:
   def run =
-    // for {
-    // files <- getFilesInDir("./textfiles")
-    // _ <- ZIO.foreach(files) {
-    //     file => readFile(file)
-    //   }
-    // } yield ()
     for {
-      lines <- readFile("./textfiles/pg-tom_sawyer.txt")
-      _ <- ZIO.foreach(lines) {
-        line => Console.printLine(line)
+      files <- getFilesInDir("./textfiles")
+      _ <- Console.printLine("finished reading files")
+      wordCounts <- ZIO.foreachPar(files) {
+          file => readFileGetWordCount(s"./textfiles/$file")
+        }
+      _ <- ZIO.foreach(wordCounts) {
+        count => Console.printLine(count)
         }
     } yield()
 
-  // def readFile(file: String) =
-  //   zio.Console.printLine(s"Reading file: $file")
-
   def getFilesInDir(dir: String): Task[List[String]] = ZIO.attempt {
       val file = File(dir)
-      file.listFiles.filter(_.isFile).map(_.getName).toList
+      val files = file.listFiles.filter(_.isFile).map(_.getName).toList
+      Console.printLine(s"Finished reading files in $dir")
+      files
   }
 
-  def readFile(file: String): Task[List[String]] = ZIO.attempt {
-    Using(Source.fromFile(new File(s"./textfiles/$file"))) {
+  def readFileGetWordCount(file: String): Task[Int] = ZIO.attempt {
+    Using(Source.fromFile(new File(file))) {
       source => source
                 .getLines
                 .toList
@@ -38,19 +35,30 @@ object ParallelFileProcessor extends ZIOAppDefault:
                 .map(line => line.filterNot(_.isDigit))
                 .map(word => word.replaceAll("\\W", ""))
                 .filterNot(_.isEmpty)
+                .length
+      }.recover {
+        case ex =>
+        Console.printLine(s"Error reading file: $file with exception: $ex")
+        0
+      }.get
+    }
+
+  def readFile(file: String): Task[List[String]] = ZIO.attempt {
+    Using(Source.fromFile(new File(file))) {
+      source => {
+        var lines = source
+                  .getLines
+                  .toList
+                  .flatMap(line => line.split(' '))
+                  .map(line => line.filterNot(_.isDigit))
+                  .map(word => word.replaceAll("\\W", ""))
+                  .filterNot(_.isEmpty)
+        Console.printLine(s"Finished reading file: $file")
+        lines
+      }
       }.recover {
         case ex =>
         Console.printLine(s"Error reading file: $file with exception: $ex")
         List.empty[String]
       }.get
     }
-
-  // def readFile(file: String): Task[List[String]] = ZIO.attempt {
-  //     def getLines(br: BufferedReader): List[String] = br.readAllLines()
-  //     val bufferedReader = new BufferedReader(
-  //       new InputStreamReader(new FileInputStream(s"./textfiles/$file")),
-  //       2048
-  //       )
-  //     try getLines(bufferedReader)
-  //       finally bufferedReader.close()
-  //   }
